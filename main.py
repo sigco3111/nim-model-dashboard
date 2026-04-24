@@ -112,12 +112,12 @@ async def check_models(data: dict):
                                 f"https://api.nvcf.nvidia.com/v2/nvcf/pexec/functions/{model_id}",
                                 headers=headers,
                                 json=payload,
-                                timeout=15  # 타임아웃 15 초로 줄임
+                                timeout=15
                             ) as model_resp:
                                 duration = (time.time() - start) * 1000
                                 
                                 if model_resp.status_code == 200:
-                                    resp_data = await model_resp.json()
+                                    resp_data = model_resp.json()  # await 제거 (httpx Response.json() is sync)
                                     content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
                                     tokens = len(content.split()) if content else 0
                                     tokens_sec = tokens / (duration / 1000) if duration > 0 else 0
