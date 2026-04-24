@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NVIDIA NIM Model Dashboard</title>
+    <style>
+        :root {
+            --primary: #0066cc;
+            --primary-hover: #0052a3;
+            --success: #28a745;
+            --danger: #dc3545;
+            --warning: #ffc107;
+            --bg: #ffffff;
+            --text: #333333;
+            --text-light: #6c757d;
+            --border: #e9ecef;
+            --card-bg: #f8f9fa;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: var(--text-light);
+            font-size: 16px;
+        }
+
+        /* API Key Section */
+        .api-section {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .api-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .api-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        select {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+        }
+
+        /* Metrics */
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .metric-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .metric-label {
+            font-size: 14px;
+            color: var(--text-light);
+            margin-top: 5px;
+        }
+
+        /* Table */
+        .table-container {
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--card-bg);
+            font-weight: 600;
+            color: #495057;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th:hover {
+            background: #e9ecef;
+        }
+
+        .status-✅ {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .status-❌ {
+            color: var(--danger);
+            font-weight: 600;
+        }
+
+        .error-msg {
+            font-size: 12px;
+            color: var(--danger);
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-light);
+        }
+
+        .spinner {
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 12px 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        /* Mobile */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            h1 {
+                font-size: 22px;
+            }
+
+            .api-row {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .control-group {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            select {
+                width: 100%;
+            }
+
+            .metrics {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            th, td {
+                padding: 8px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 NVIDIA NIM Model Dashboard</h1>
+            <p class="subtitle">Real-time Model Status & Performance Monitor</p>
+        </header>
+
+        <!-- API Key Section -->
+        <div class="api-section">
+            <div class="api-row">
+                <input type="password" id="apiKeyInput" class="api-input" placeholder="Enter your NVIDIA NIM API Key">
+                <button id="saveKeyBtn" class="btn btn-primary">💾 Save</button>
+                <button id="clearKeyBtn" class="btn btn-danger">🗑️ Clear</button>
+            </div>
+            <div id="keyStatus" style="margin-top: 10px; font-size: 14px; color: var(--text-light);"></div>
+        </div>
+
+        <!-- Alerts -->
+        <div id="alerts"></div>
+
+        <!-- Check Button -->
+        <button id="checkBtn" class="btn btn-primary" style="width: 100%; margin-bottom: 20px; padding: 15px;">
+            🔍 Check All Models
+        </button>
+
+        <!-- Loading -->
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p id="loadingText">Checking models...</p>
+        </div>
+
+        <!-- Results -->
+        <div id="results" style="display: none;">
+            <!-- Controls -->
+            <div class="controls">
+                <div class="control-group">
+                    <label>Filter:</label>
+                    <select id="filterSelect">
+                        <option value="all">All Models</option>
+                        <option value="success">Success (✅)</option>
+                        <option value="failed">Failed (❌)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Sort by:</label>
+                    <select id="sortSelect">
+                        <option value="response_time_asc">Response Time (Fastest)</option>
+                        <option value="tokens_per_sec_desc">Tokens/sec (Fastest)</option>
+                        <option value="model_name">Model Name (A-Z)</option>
+                        <option value="status">Status</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Metrics -->
+            <div class="metrics">
+                <div class="metric-card">
+                    <div class="metric-value" id="totalModels">0</div>
+                    <div class="metric-label">Total Models</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="successModels" style="color: var(--success);">0</div>
+                    <div class="metric-label">Success</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="failedModels" style="color: var(--danger);">0</div>
+                    <div class="metric-label">Failed</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="avgTime">N/A</div>
+                    <div class="metric-label">Avg Response Time</div>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="table-container">
+                <table id="resultsTable">
+                    <thead>
+                        <tr>
+                            <th onclick="sortTable('model')">Model Name</th>
+                            <th onclick="sortTable('status')">Status</th>
+                            <th onclick="sortTable('response_time')">Response Time (ms)</th>
+                            <th onclick="sortTable('tokens_per_sec')">Tokens/sec</th>
+                            <th>Last Check</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer style="margin-top: 40px; text-align: center; color: var(--text-light); font-size: 12px;">
+            <p>NVIDIA NIM Model Dashboard | Built with FastAPI & Vercel</p>
+        </footer>
+    </div>
+
+    <script>
+        let allData = [];
+        let currentSort = { field: 'response_time', order: 'asc' };
+
+        // Load API Key from localStorage
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedKey = localStorage.getItem('nvidia_nim_api_key');
+            if (savedKey) {
+                document.getElementById('apiKeyInput').value = savedKey;
+                checkKeyStatus();
+            }
+        });
+
+        // Check API Key Status
+        async function checkKeyStatus() {
+            try {
+                const res = await fetch('/api/key-status');
+                const data = await res.json();
+                const statusDiv = document.getElementById('keyStatus');
+                if (data.has_key) {
+                    statusDiv.textContent = '✅ API Key is set (from server session)';
+                    statusDiv.style.color = 'var(--success)';
+                } else {
+                    statusDiv.textContent = '';
+                }
+            } catch (e) {
+                console.error('Error checking key status:', e);
+            }
+        }
+
+        // Save API Key
+        document.getElementById('saveKeyBtn').addEventListener('click', async () => {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            if (!key) {
+                showAlert('Please enter an API Key', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/set-key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: key })
+                });
+
+                if (res.ok) {
+                    localStorage.setItem('nvidia_nim_api_key', key);
+                    showAlert('API Key saved!', 'success');
+                    checkKeyStatus();
+                } else {
+                    showAlert('Failed to save API Key', 'error');
+                }
+            } catch (e) {
+                showAlert('Error: ' + e.message, 'error');
+            }
+        });
+
+        // Clear API Key
+        document.getElementById('clearKeyBtn').addEventListener('click', async () => {
+            try {
+                const res = await fetch('/api/clear-key', { method: 'POST' });
+                if (res.ok) {
+                    localStorage.removeItem('nvidia_nim_api_key');
+                    document.getElementById('apiKeyInput').value = '';
+                    showAlert('API Key cleared!', 'success');
+                    document.getElementById('keyStatus').textContent = '';
+                }
+            } catch (e) {
+                showAlert('Error: ' + e.message, 'error');
+            }
+        });
+
+        // Show Alert
+        function showAlert(message, type) {
+            const alertsDiv = document.getElementById('alerts');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.textContent = message;
+            alertsDiv.appendChild(alertDiv);
+            setTimeout(() => alertDiv.remove(), 5000);
+        }
+
+        // Check Models
+        document.getElementById('checkBtn').addEventListener('click', async () => {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            if (!key) {
+                showAlert('Please enter your NVIDIA NIM API Key first', 'warning');
+                return;
+            }
+
+            const btn = document.getElementById('checkBtn');
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            const alerts = document.getElementById('alerts');
+
+            btn.disabled = true;
+            loading.style.display = 'block';
+            results.style.display = 'none';
+            alerts.innerHTML = '';
+
+            try {
+                const res = await fetch('/api/check-models', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: key })
+                });
+
+                if (!res.ok) {
+                    const error = await res.json();
+                    throw new Error(error.detail || 'Check failed');
+                }
+
+                const data = await res.json();
+                allData = data.models_data || [];
+                
+                // Update UI
+                document.getElementById('loadingText').textContent = 'Check completed!';
+                setTimeout(() => {
+                    loading.style.display = 'none';
+                    results.style.display = 'block';
+                    btn.disabled = false;
+                    renderTable();
+                    showAlert(`✅ Completed checking ${allData.length} models!`, 'success');
+                }, 1000);
+
+            } catch (e) {
+                loading.style.display = 'none';
+                btn.disabled = false;
+                showAlert('Error: ' + e.message, 'error');
+            }
+        });
+
+        // Render Table
+        function renderTable() {
+            const filter = document.getElementById('filterSelect').value;
+            const sortField = document.getElementById('sortSelect').value;
+
+            // Filter
+            let filtered = allData;
+            if (filter === 'success') {
+                filtered = allData.filter(m => m.status === '✅');
+            } else if (filter === 'failed') {
+                filtered = allData.filter(m => m.status === '❌');
+            }
+
+            // Sort
+            filtered.sort((a, b) => {
+                let valA, valB;
+                if (sortField === 'model_name') {
+                    valA = a.model.toLowerCase();
+                    valB = b.model.toLowerCase();
+                } else if (sortField === 'status') {
+                    valA = a.status === '✅' ? 0 : 1;
+                    valB = b.status === '✅' ? 0 : 1;
+                } else {
+                    valA = a[sortField] || 0;
+                    valB = b[sortField] || 0;
+                }
+                
+                if (valA < valB) return -1;
+                if (valA > valB) return 1;
+                return 0;
+            });
+
+            // Update Metrics
+            const total = filtered.length;
+            const success = filtered.filter(m => m.status === '✅').length;
+            const failed = total - success;
+            const avgTime = success > 0 
+                ? filtered.filter(m => m.status === '✅').reduce((sum, m) => sum + m.response_time, 0) / success 
+                : 0;
+
+            document.getElementById('totalModels').textContent = total;
+            document.getElementById('successModels').textContent = success;
+            document.getElementById('failedModels').textContent = failed;
+            document.getElementById('avgTime').textContent = avgTime > 0 ? `${avgTime.toFixed(0)} ms` : 'N/A';
+
+            // Render Rows
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            filtered.forEach(model => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${model.model}</td>
+                    <td class="status-${model.status}">${model.status}</td>
+                    <td>${model.response_time > 0 ? model.response_time.toFixed(2) : '-'}</td>
+                    <td>${model.tokens_per_sec > 0 ? model.tokens_per_sec.toFixed(2) : '-'}</td>
+                    <td>${model.last_check}</td>
+                    <td class="error-msg" title="${model.error}">${model.error || '-'}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Filter & Sort Event Listeners
+        document.getElementById('filterSelect').addEventListener('change', renderTable);
+        document.getElementById('sortSelect').addEventListener('change', renderTable);
+
+        // Initial load
+        async function loadStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                if (data.models_data && data.models_data.length > 0) {
+                    allData = data.models_data;
+                    document.getElementById('results').style.display = 'block';
+                    renderTable();
+                }
+            } catch (e) {
+                console.error('Error loading status:', e);
+            }
+        }
+
+        loadStatus();
+    </script>
+</body>
+</html>
