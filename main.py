@@ -93,7 +93,7 @@ async def check_models(data: dict):
                 total = len(nim_models)
                 
                 # Health check with limited concurrency
-                semaphore = asyncio.Semaphore(5)
+                semaphore = asyncio.Semaphore(3)  # 동시성 3 개로 줄임 (타임아웃 방지)
                 
                 async def check_single_model(model, client):
                     async with semaphore:
@@ -112,7 +112,7 @@ async def check_models(data: dict):
                                 f"https://api.nvcf.nvidia.com/v2/nvcf/pexec/functions/{model_id}",
                                 headers=headers,
                                 json=payload,
-                                timeout=30
+                                timeout=15  # 타임아웃 15 초로 줄임
                             ) as model_resp:
                                 duration = (time.time() - start) * 1000
                                 
@@ -139,6 +139,15 @@ async def check_models(data: dict):
                                         "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                         "error": f"HTTP {model_resp.status_code}"
                                     }
+                        except asyncio.TimeoutError:
+                            return {
+                                "model": model_name,
+                                "status": "❌",
+                                "response_time": 0,
+                                "tokens_per_sec": 0,
+                                "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "error": "Timeout"
+                            }
                         except Exception as e:
                             return {
                                 "model": model_name,
@@ -151,7 +160,23 @@ async def check_models(data: dict):
                 
                 # Run all checks with client passed as argument
                 tasks = [check_single_model(m, client) for m in nim_models]
-                results = await asyncio.gather(*tasks)
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                # 에러 발생 시 예외 처리
+                final_results = []
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        final_results.append({
+                            "model": nim_models[i].get("name", nim_models[i].get("id", "unknown")),
+                            "status": "❌",
+                            "response_time": 0,
+                            "tokens_per_sec": 0,
+                            "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "error": f"Exception: {str(result)}"
+                        })
+                    else:
+                        final_results.append(result)
+                results = final_results
                 
                 global_state["models_data"] = results
                 global_state["last_check"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
