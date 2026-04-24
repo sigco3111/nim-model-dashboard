@@ -85,10 +85,10 @@ async def check_models(data: dict):
                     raise HTTPException(status_code=400, detail=f"Failed to fetch models: {resp.text}")
                 
                 models_list = resp.json().get("functions", [])
-                # Filter for NIM models
-                nim_models = [m for m in models_list if "nvcf" in m.get("id", "").lower() or "nim" in m.get("name", "").lower()]
-                if not nim_models:
-                    nim_models = models_list
+                
+                # 모든 모델을 체크 (필터링 제거)
+                # 필요시 특정 모델만 필터링: nim_models = [m for m in models_list if "llama" in m.get("id", "").lower()]
+                nim_models = models_list
                 
                 total = len(nim_models)
                 results = []
