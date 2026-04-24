@@ -25,7 +25,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", Malgun Gothic, sans-serif;
             background-color: var(--bg);
             color: var(--text);
             line-height: 1.6;
@@ -47,11 +47,13 @@
             font-weight: 700;
             color: #1a1a1a;
             margin-bottom: 10px;
+            letter-spacing: -0.5px;
         }
 
         .subtitle {
             color: var(--text-light);
             font-size: 16px;
+            font-weight: 400;
         }
 
         /* API Key Section */
@@ -61,6 +63,7 @@
             border-radius: 8px;
             padding: 20px;
             margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
 
         .api-row {
@@ -76,6 +79,13 @@
             border: 1px solid var(--border);
             border-radius: 6px;
             font-size: 14px;
+            background: white;
+            transition: border-color 0.2s;
+        }
+
+        .api-input:focus {
+            outline: none;
+            border-color: var(--primary);
         }
 
         .btn {
@@ -86,6 +96,7 @@
             cursor: pointer;
             transition: all 0.2s;
             font-size: 14px;
+            white-space: nowrap;
         }
 
         .btn-primary {
@@ -141,6 +152,12 @@
             border-radius: 6px;
             font-size: 14px;
             background: white;
+            cursor: pointer;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: var(--primary);
         }
 
         /* Metrics */
@@ -157,18 +174,19 @@
             border-radius: 8px;
             padding: 15px;
             text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
 
         .metric-value {
             font-size: 24px;
             font-weight: 700;
             color: var(--primary);
+            margin-bottom: 5px;
         }
 
         .metric-label {
             font-size: 14px;
             color: var(--text-light);
-            margin-top: 5px;
         }
 
         /* Table */
@@ -177,6 +195,7 @@
             border: 1px solid var(--border);
             border-radius: 8px;
             background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
 
         table {
@@ -186,7 +205,7 @@
         }
 
         th, td {
-            padding: 12px;
+            padding: 12px 15px;
             text-align: left;
             border-bottom: 1px solid var(--border);
         }
@@ -197,6 +216,7 @@
             color: #495057;
             cursor: pointer;
             user-select: none;
+            white-space: nowrap;
         }
 
         th:hover {
@@ -250,24 +270,25 @@
             border-radius: 6px;
             margin-bottom: 15px;
             font-size: 14px;
+            border-left: 4px solid;
         }
 
         .alert-warning {
             background: #fff3cd;
             color: #856404;
-            border: 1px solid #ffeeba;
+            border-color: #ffeeba;
         }
 
         .alert-success {
             background: #d4edda;
             color: #155724;
-            border: 1px solid #c3e6cb;
+            border-color: #c3e6cb;
         }
 
         .alert-error {
             background: #f8d7da;
             color: #721c24;
-            border: 1px solid #f5c6cb;
+            border-color: #f5c6cb;
         }
 
         /* Mobile */
@@ -307,8 +328,8 @@
             }
 
             th, td {
-                padding: 8px;
-                font-size: 12px;
+                padding: 10px;
+                font-size: 13px;
             }
         }
     </style>
@@ -316,16 +337,16 @@
 <body>
     <div class="container">
         <header>
-            <h1>🚀 NVIDIA NIM Model Dashboard</h1>
-            <p class="subtitle">Real-time Model Status & Performance Monitor</p>
+            <h1>🚀 NVIDIA NIM 모델 대시보드</h1>
+            <p class="subtitle">실시간 모델 상태 및 성능 모니터링</p>
         </header>
 
         <!-- API Key Section -->
         <div class="api-section">
             <div class="api-row">
-                <input type="password" id="apiKeyInput" class="api-input" placeholder="Enter your NVIDIA NIM API Key">
-                <button id="saveKeyBtn" class="btn btn-primary">💾 Save</button>
-                <button id="clearKeyBtn" class="btn btn-danger">🗑️ Clear</button>
+                <input type="password" id="apiKeyInput" class="api-input" placeholder="NVIDIA NIM API 키를 입력하세요">
+                <button id="saveKeyBtn" class="btn btn-primary">💾 저장</button>
+                <button id="clearKeyBtn" class="btn btn-danger">🗑️ 초기화</button>
             </div>
             <div id="keyStatus" style="margin-top: 10px; font-size: 14px; color: var(--text-light);"></div>
         </div>
@@ -335,13 +356,13 @@
 
         <!-- Check Button -->
         <button id="checkBtn" class="btn btn-primary" style="width: 100%; margin-bottom: 20px; padding: 15px;">
-            🔍 Check All Models
+            🔍 모델 상태 체크 시작
         </button>
 
         <!-- Loading -->
         <div id="loading" class="loading" style="display: none;">
             <div class="spinner"></div>
-            <p id="loadingText">Checking models...</p>
+            <p id="loadingText">모델을 체크 중입니다...</p>
         </div>
 
         <!-- Results -->
@@ -349,20 +370,20 @@
             <!-- Controls -->
             <div class="controls">
                 <div class="control-group">
-                    <label>Filter:</label>
+                    <label>필터:</label>
                     <select id="filterSelect">
-                        <option value="all">All Models</option>
-                        <option value="success">Success (✅)</option>
-                        <option value="failed">Failed (❌)</option>
+                        <option value="all">전체 모델</option>
+                        <option value="success">성공 (✅)</option>
+                        <option value="failed">실패 (❌)</option>
                     </select>
                 </div>
                 <div class="control-group">
-                    <label>Sort by:</label>
+                    <label>정렬:</label>
                     <select id="sortSelect">
-                        <option value="response_time_asc">Response Time (Fastest)</option>
-                        <option value="tokens_per_sec_desc">Tokens/sec (Fastest)</option>
-                        <option value="model_name">Model Name (A-Z)</option>
-                        <option value="status">Status</option>
+                        <option value="response_time_asc">응답 시간 (빠른순)</option>
+                        <option value="tokens_per_sec_desc">토큰/초 (빠른순)</option>
+                        <option value="model_name">모델 이름 (가나다순)</option>
+                        <option value="status">상태</option>
                     </select>
                 </div>
             </div>
@@ -371,19 +392,19 @@
             <div class="metrics">
                 <div class="metric-card">
                     <div class="metric-value" id="totalModels">0</div>
-                    <div class="metric-label">Total Models</div>
+                    <div class="metric-label">총 모델 수</div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-value" id="successModels" style="color: var(--success);">0</div>
-                    <div class="metric-label">Success</div>
+                    <div class="metric-label">성공</div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-value" id="failedModels" style="color: var(--danger);">0</div>
-                    <div class="metric-label">Failed</div>
+                    <div class="metric-label">실패</div>
                 </div>
                 <div class="metric-card">
                     <div class="metric-value" id="avgTime">N/A</div>
-                    <div class="metric-label">Avg Response Time</div>
+                    <div class="metric-label">평균 응답 시간</div>
                 </div>
             </div>
 
@@ -392,12 +413,12 @@
                 <table id="resultsTable">
                     <thead>
                         <tr>
-                            <th onclick="sortTable('model')">Model Name</th>
-                            <th onclick="sortTable('status')">Status</th>
-                            <th onclick="sortTable('response_time')">Response Time (ms)</th>
-                            <th onclick="sortTable('tokens_per_sec')">Tokens/sec</th>
-                            <th>Last Check</th>
-                            <th>Error</th>
+                            <th onclick="sortTable('model')">모델 이름</th>
+                            <th onclick="sortTable('status')">상태</th>
+                            <th onclick="sortTable('response_time')">응답 시간 (ms)</th>
+                            <th onclick="sortTable('tokens_per_sec')">토큰/초</th>
+                            <th>마지막 체크</th>
+                            <th>오류</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody">
@@ -408,7 +429,7 @@
 
         <!-- Footer -->
         <footer style="margin-top: 40px; text-align: center; color: var(--text-light); font-size: 12px;">
-            <p>NVIDIA NIM Model Dashboard | Built with FastAPI & Vercel</p>
+            <p>NVIDIA NIM 모델 대시보드 | FastAPI & Vercel 로 구축</p>
         </footer>
     </div>
 
@@ -446,7 +467,7 @@
         document.getElementById('saveKeyBtn').addEventListener('click', async () => {
             const key = document.getElementById('apiKeyInput').value.trim();
             if (!key) {
-                showAlert('Please enter an API Key', 'error');
+                showAlert('API 키를 입력해주세요', 'error');
                 return;
             }
 
@@ -459,13 +480,13 @@
 
                 if (res.ok) {
                     localStorage.setItem('nvidia_nim_api_key', key);
-                    showAlert('API Key saved!', 'success');
+                    showAlert('API 키가 저장되었습니다!', 'success');
                     checkKeyStatus();
                 } else {
-                    showAlert('Failed to save API Key', 'error');
+                    showAlert('API 키 저장에 실패했습니다', 'error');
                 }
             } catch (e) {
-                showAlert('Error: ' + e.message, 'error');
+                showAlert('오류: ' + e.message, 'error');
             }
         });
 
@@ -476,11 +497,11 @@
                 if (res.ok) {
                     localStorage.removeItem('nvidia_nim_api_key');
                     document.getElementById('apiKeyInput').value = '';
-                    showAlert('API Key cleared!', 'success');
+                    showAlert('API 키가 초기화되었습니다!', 'success');
                     document.getElementById('keyStatus').textContent = '';
                 }
             } catch (e) {
-                showAlert('Error: ' + e.message, 'error');
+                showAlert('오류: ' + e.message, 'error');
             }
         });
 
@@ -498,7 +519,7 @@
         document.getElementById('checkBtn').addEventListener('click', async () => {
             const key = document.getElementById('apiKeyInput').value.trim();
             if (!key) {
-                showAlert('Please enter your NVIDIA NIM API Key first', 'warning');
+                showAlert('먼저 NVIDIA NIM API 키를 입력해주세요', 'warning');
                 return;
             }
 
@@ -521,26 +542,26 @@
 
                 if (!res.ok) {
                     const error = await res.json();
-                    throw new Error(error.detail || 'Check failed');
+                    throw new Error(error.detail || '체크에 실패했습니다');
                 }
 
                 const data = await res.json();
                 allData = data.models_data || [];
                 
                 // Update UI
-                document.getElementById('loadingText').textContent = 'Check completed!';
+                document.getElementById('loadingText').textContent = '체크가 완료되었습니다!';
                 setTimeout(() => {
                     loading.style.display = 'none';
                     results.style.display = 'block';
                     btn.disabled = false;
                     renderTable();
-                    showAlert(`✅ Completed checking ${allData.length} models!`, 'success');
+                    showAlert(`✅ 총 ${allData.length}개 모델을 체크했습니다!`, 'success');
                 }, 1000);
 
             } catch (e) {
                 loading.style.display = 'none';
                 btn.disabled = false;
-                showAlert('Error: ' + e.message, 'error');
+                showAlert('오류: ' + e.message, 'error');
             }
         });
 
