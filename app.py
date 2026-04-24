@@ -1,11 +1,9 @@
 import streamlit as st
 import requests
 import time
-import asyncio
-import aiohttp
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 from datetime import datetime
-import os
 
 # 페이지 설정
 st.set_page_config(
@@ -53,95 +51,120 @@ if "api_key" not in st.session_state or not st.session_state.api_key:
     st.warning("⚠️ 상단의 'API 키 설정'에서 NVIDIA NIM API 키를 입력하고 저장해주세요.")
     st.stop()
 
+# 체크 함수 (동기 방식)
+def check_single_model(model, api_key):
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    model_id = model.get("id", "unknown")
+    model_name = model.get("name", model_id)
+    
+    try:
+        start = time.time()
+        payload = {
+            "model": model_id,
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 1
+        }
+        
+        resp = requests.post(
+            f"https://api.nvcf.nvidia.com/v2/nvcf/pexec/functions/{model_id}",
+            headers=headers,
+            json=payload,
+            timeout=15
+        )
+        
+        duration = (time.time() - start) * 1000
+        
+        if resp.status_code == 200:
+            resp_data = resp.json()
+            content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            tokens = len(content.split()) if content else 0
+            tokens_sec = tokens / (duration / 1000) if duration > 0 else 0
+            
+            return {
+                "model": model_name,
+                "status": "✅",
+                "response_time": round(duration, 2),
+                "tokens_per_sec": round(tokens_sec, 2),
+                "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "error": ""
+            }
+        else:
+            return {
+                "model": model_name,
+                "status": "❌",
+                "response_time": 0,
+                "tokens_per_sec": 0,
+                "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "error": f"HTTP {resp.status_code}"
+            }
+    except requests.exceptions.Timeout:
+        return {
+            "model": model_name,
+            "status": "❌",
+            "response_time": 0,
+            "tokens_per_sec": 0,
+            "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "error": "Timeout"
+        }
+    except Exception as e:
+        return {
+            "model": model_name,
+            "status": "❌",
+            "response_time": 0,
+            "tokens_per_sec": 0,
+            "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "error": str(e)
+        }
+
 # 체크 버튼
 if st.button("🔍 모델 상태 체크 시작", key="check_btn", use_container_width=True):
-    with st.spinner("모델 목록을 조회하고 상태 체크 중입니다... (약 10~30 분 소요될 수 있습니다)"):
-        try:
-            headers = {
-                "Authorization": f"Bearer {st.session_state.api_key}",
-                "Content-Type": "application/json"
-            }
+    try:
+        headers = {
+            "Authorization": f"Bearer {st.session_state.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        # 1. 모델 목록 조회
+        st.write("📡 NVIDIA NIM API 에서 모델 목록을 가져오는 중...")
+        resp = requests.get("https://api.nvcf.nvidia.com/v2/nvcf/functions", headers=headers, timeout=30)
+        if resp.status_code != 200:
+            st.error(f"모델 목록 조회 실패: {resp.status_code} - {resp.text}")
+            st.stop()
+        
+        models_list = resp.json().get("functions", [])
+        nim_models = models_list  # 모든 모델 체크
+        
+        total = len(nim_models)
+        st.write(f"🔎 총 {total}개 모델을 발견했습니다. 체크를 시작합니다...")
+        
+        # 2. 병렬 체크 (ThreadPoolExecutor 사용)
+        results = []
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_to_model = {executor.submit(check_single_model, m, st.session_state.api_key): m for m in nim_models}
             
-            # 1. 모델 목록 조회
-            st.write("📡 NVIDIA NIM API 에서 모델 목록을 가져오는 중...")
-            resp = requests.get("https://api.nvcf.nvidia.com/v2/nvcf/functions", headers=headers, timeout=30)
-            if resp.status_code != 200:
-                st.error(f"모델 목록 조회 실패: {resp.status_code} - {resp.text}")
-                st.stop()
+            progress_bar = st.progress(0)
+            status_text = st.empty()
             
-            models_list = resp.json().get("functions", [])
-            nim_models = models_list  # 모든 모델 체크
+            for i, future in enumerate(as_completed(future_to_model)):
+                result = future.result()
+                results.append(result)
+                progress = int((i + 1) / total * 100)
+                progress_bar.progress(progress)
+                status_text.text(f"체크 중: {i + 1}/{total} ({result['status']})")
             
-            total = len(nim_models)
-            st.write(f"🔎 총 {total}개 모델을 발견했습니다. 체크를 시작합니다...")
-            
-            # 2. 비동기 헬스체크 (Streamlit 은 동기 실행 환경이지만, asyncio 사용 가능)
-            results = []
-            
-            async def check_single_model(model, semaphore):
-                async with semaphore:
-                    model_id = model.get("id", "unknown")
-                    model_name = model.get("name", model_id)
-                    try:
-                        start = time.time()
-                        payload = {"model": model_id, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 1}
-                        async with aiohttp.ClientSession() as session:
-                            async with session.post(
-                                f"https://api.nvcf.nvidia.com/v2/nvcf/pexec/functions/{model_id}",
-                                headers=headers,
-                                json=payload,
-                                timeout=aiohttp.ClientTimeout(total=15)
-                            ) as model_resp:
-                                duration = (time.time() - start) * 1000
-                                if model_resp.status == 200:
-                                    resp_data = await model_resp.json()
-                                    content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                                    tokens = len(content.split()) if content else 0
-                                    tokens_sec = tokens / (duration / 1000) if duration > 0 else 0
-                                    return {
-                                        "model": model_name, "status": "✅",
-                                        "response_time": round(duration, 2), "tokens_per_sec": round(tokens_sec, 2),
-                                        "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "error": ""
-                                    }
-                                else:
-                                    return {
-                                        "model": model_name, "status": "❌",
-                                        "response_time": 0, "tokens_per_sec": 0,
-                                        "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                        "error": f"HTTP {model_resp.status}"
-                                    }
-                    except Exception as e:
-                        return {
-                            "model": model_name, "status": "❌",
-                            "response_time": 0, "tokens_per_sec": 0,
-                            "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "error": str(e)
-                        }
-            
-            # 병렬 처리 (동시성 3)
-            semaphore = asyncio.Semaphore(3)
-            tasks = [check_single_model(m, semaphore) for m in nim_models]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # 결과 정리
-            final_results = []
-            for i, res in enumerate(results):
-                if isinstance(res, Exception):
-                    final_results.append({
-                        "model": nim_models[i].get("name", nim_models[i].get("id", "unknown")),
-                        "status": "❌", "response_time": 0, "tokens_per_sec": 0,
-                        "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "error": f"Exception: {str(res)}"
-                    })
-                else:
-                    final_results.append(res)
-            
-            st.session_state.results = final_results
-            st.session_state.last_check = datetime.now()
-            st.success(f"✅ 체크 완료! 총 {len(final_results)}개 모델 결과를 확인하세요.")
-            st.rerun()
-            
-        except Exception as e:
-            st.error(f"❌ 에러 발생: {str(e)}")
+            progress_bar.empty()
+            status_text.empty()
+        
+        st.session_state.results = results
+        st.session_state.last_check = datetime.now()
+        st.success(f"✅ 체크 완료! 총 {len(results)}개 모델 결과를 확인하세요.")
+        st.rerun()
+        
+    except Exception as e:
+        st.error(f"❌ 에러 발생: {str(e)}")
 
 # 결과 표시
 if "results" in st.session_state and st.session_state.results:

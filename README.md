@@ -26,7 +26,7 @@
 ## 🖥️ 데모
 
 실시간 데모는 다음 URL 에서 확인하실 수 있습니다:
-👉 **[https://nim-model-dashboard.vercel.app](https://nim-model-dashboard.vercel.app)**
+👉 **[https://nim-model-dashboard.streamlit.app](https://nim-model-dashboard.streamlit.app)**
 
 ---
 
