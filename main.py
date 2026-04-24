@@ -91,12 +91,11 @@ async def check_models(data: dict):
                 nim_models = models_list
                 
                 total = len(nim_models)
-                results = []
                 
                 # Health check with limited concurrency
                 semaphore = asyncio.Semaphore(5)
                 
-                async def check_single_model(model):
+                async def check_single_model(model, client):
                     async with semaphore:
                         model_id = model.get("id", "unknown")
                         model_name = model.get("name", model_id)
@@ -118,7 +117,7 @@ async def check_models(data: dict):
                                 duration = (time.time() - start) * 1000
                                 
                                 if model_resp.status_code == 200:
-                                    resp_data = model_resp.json()
+                                    resp_data = await model_resp.json()
                                     content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
                                     tokens = len(content.split()) if content else 0
                                     tokens_sec = tokens / (duration / 1000) if duration > 0 else 0
@@ -150,8 +149,8 @@ async def check_models(data: dict):
                                 "error": str(e)
                             }
                 
-                # Run all checks
-                tasks = [check_single_model(m) for m in nim_models]
+                # Run all checks with client passed as argument
+                tasks = [check_single_model(m, client) for m in nim_models]
                 results = await asyncio.gather(*tasks)
                 
                 global_state["models_data"] = results
