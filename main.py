@@ -158,7 +158,11 @@ async def check_models(data: dict):
                 global_state["last_check"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 global_state["is_checking"] = False
                 
-                return {"message": "Check completed", "count": len(results)}
+                return {
+                    "message": "Check completed", 
+                    "count": len(results),
+                    "models_data": results  # 결과를 바로 반환
+                }
                 
             except httpx.TimeoutException:
                 raise HTTPException(status_code=504, detail="Request timeout")

@@ -546,6 +546,7 @@
                 }
 
                 const data = await res.json();
+                //直接使用 체크 결과를 allData 에 저장 (GET /api/status 호출 불필요)
                 allData = data.models_data || [];
                 
                 // Update UI
@@ -554,7 +555,7 @@
                     loading.style.display = 'none';
                     results.style.display = 'block';
                     btn.disabled = false;
-                    renderTable();
+                    renderTable(); // 직접 렌더링
                     showAlert(`✅ 총 ${allData.length}개 모델을 체크했습니다!`, 'success');
                 }, 1000);
 
