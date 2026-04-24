@@ -1,8 +1,5 @@
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse
 import httpx
 import asyncio
 import time
@@ -12,11 +9,7 @@ import os
 
 app = FastAPI()
 
-# Templates and Static Files
-templates = Jinja2Templates(directory="templates")
-
-# In-memory storage (Note: In production, use Redis or DB)
-# Vercel Serverless: State is reset on each cold start, but persists during warm duration
+# In-memory storage
 global_state = {
     "api_key": None,
     "models_data": None,
@@ -24,28 +17,23 @@ global_state = {
     "is_checking": False
 }
 
-class APIKeyRequest(BaseModel):
-    api_key: str
-
-class HealthCheckRequest(BaseModel):
-    api_key: str
-
-class ModelResult(BaseModel):
-    model: str
-    status: str
-    response_time: float
-    tokens_per_sec: float
-    last_check: str
-    error: str = ""
+# Read HTML file directly
+def get_html_content():
+    try:
+        with open("templates/index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"<html><body><h1>Error loading page: {e}</h1></body></html>"
 
 @app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+async def read_root():
+    return HTMLResponse(content=get_html_content())
 
 @app.post("/api/set-key")
-async def set_api_key(data: APIKeyRequest):
+async def set_api_key(data: dict):
     global global_state
-    global_state["api_key"] = data.api_key
+    api_key = data.get("api_key", "")
+    global_state["api_key"] = api_key
     return {"message": "API Key saved"}
 
 @app.post("/api/clear-key")
@@ -69,31 +57,35 @@ async def get_status():
     }
 
 @app.post("/api/check-models")
-async def check_models(data: HealthCheckRequest):
+async def check_models(data: dict):
     global global_state
+    
+    api_key = data.get("api_key", "")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="API Key is required")
     
     if global_state["is_checking"]:
         raise HTTPException(status_code=400, detail="Check already in progress")
     
-    global_state["api_key"] = data.api_key
+    global_state["api_key"] = api_key
     global_state["is_checking"] = True
     global_state["models_data"] = None
     
     try:
         headers = {
-            "Authorization": f"Bearer {data.api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
         
-        # Step 1: Fetch model list
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
+                # Fetch model list
                 resp = await client.get("https://api.nvcf.nvidia.com/v2/nvcf/functions", headers=headers)
                 if resp.status_code != 200:
                     raise HTTPException(status_code=400, detail=f"Failed to fetch models: {resp.text}")
                 
                 models_list = resp.json().get("functions", [])
-                # Filter for NIM models (heuristic)
+                # Filter for NIM models
                 nim_models = [m for m in models_list if "nvcf" in m.get("id", "").lower() or "nim" in m.get("name", "").lower()]
                 if not nim_models:
                     nim_models = models_list
@@ -101,8 +93,8 @@ async def check_models(data: HealthCheckRequest):
                 total = len(nim_models)
                 results = []
                 
-                # Step 2: Health check with limited concurrency
-                semaphore = asyncio.Semaphore(5)  # Max 5 concurrent requests
+                # Health check with limited concurrency
+                semaphore = asyncio.Semaphore(5)
                 
                 async def check_single_model(model):
                     async with semaphore:
@@ -177,7 +169,3 @@ async def check_models(data: HealthCheckRequest):
     except Exception as e:
         global_state["is_checking"] = False
         raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
