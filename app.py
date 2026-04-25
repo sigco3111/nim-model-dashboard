@@ -23,8 +23,6 @@ st.markdown("""
     .metric-label { font-size: 14px; color: #6c757d; margin-top: 5px; }
     .status-success { color: #28a745; font-weight: 600; }
     .status-error { color: #dc3545; font-weight: 600; }
-    .btn-check { background-color: #0066cc; color: white; border: none; border-radius: 6px; padding: 12px 24px; font-weight: 600; font-size: 16px; width: 100%; margin-bottom: 20px; }
-    .btn-check:hover { background-color: #0052a3; }
     .api-section { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
@@ -51,14 +49,35 @@ if "api_key" not in st.session_state or not st.session_state.api_key:
     st.warning("⚠️ 상단의 'API 키 설정'에서 NVIDIA NIM API 키를 입력하고 저장해주세요.")
     st.stop()
 
+# Hugging Face API 를 통해 NVIDIA 모델 목록 가져오기
+def get_nvidia_models_from_hf():
+    try:
+        # Hugging Face API: nvidia 조직의 모든 모델 가져오기
+        url = "https://huggingface.co/api/models"
+        params = {
+            "author": "nvidia",
+            "pipeline_tag": "text-generation",  # 텍스트 생성 모델만 필터
+            "limit": 500  # 최대 500 개
+        }
+        resp = requests.get(url, params=params, timeout=30)
+        if resp.status_code == 200:
+            models = resp.json()
+            # 모델 ID 추출 (예: nvidia/Llama3-ChatQA-1.5-8B)
+            model_ids = [m["id"] for m in models]
+            return model_ids
+        else:
+            st.error(f"Hugging Face API 오류: {resp.status_code}")
+            return []
+    except Exception as e:
+        st.error(f"Hugging Face 모델 목록 가져오기 실패: {str(e)}")
+        return []
+
 # 체크 함수 (동기 방식)
-def check_single_model(model, api_key):
+def check_single_model(model_id, api_key):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    model_id = model.get("id", "unknown")
-    model_name = model.get("name", model_id)
     
     try:
         start = time.time()
@@ -84,7 +103,7 @@ def check_single_model(model, api_key):
             tokens_sec = tokens / (duration / 1000) if duration > 0 else 0
             
             return {
-                "model": model_name,
+                "model": model_id,
                 "status": "✅",
                 "response_time": round(duration, 2),
                 "tokens_per_sec": round(tokens_sec, 2),
@@ -93,7 +112,7 @@ def check_single_model(model, api_key):
             }
         else:
             return {
-                "model": model_name,
+                "model": model_id,
                 "status": "❌",
                 "response_time": 0,
                 "tokens_per_sec": 0,
@@ -102,7 +121,7 @@ def check_single_model(model, api_key):
             }
     except requests.exceptions.Timeout:
         return {
-            "model": model_name,
+            "model": model_id,
             "status": "❌",
             "response_time": 0,
             "tokens_per_sec": 0,
@@ -111,7 +130,7 @@ def check_single_model(model, api_key):
         }
     except Exception as e:
         return {
-            "model": model_name,
+            "model": model_id,
             "status": "❌",
             "response_time": 0,
             "tokens_per_sec": 0,
@@ -122,28 +141,21 @@ def check_single_model(model, api_key):
 # 체크 버튼
 if st.button("🔍 모델 상태 체크 시작", key="check_btn", use_container_width=True):
     try:
-        headers = {
-            "Authorization": f"Bearer {st.session_state.api_key}",
-            "Content-Type": "application/json"
-        }
+        # 1. Hugging Face 에서 NVIDIA 모델 목록 가져오기
+        st.write("📡 Hugging Face 에서 NVIDIA 모델 목록을 가져오는 중...")
+        model_ids = get_nvidia_models_from_hf()
         
-        # 1. 모델 목록 조회
-        st.write("📡 NVIDIA NIM API 에서 모델 목록을 가져오는 중...")
-        resp = requests.get("https://api.nvcf.nvidia.com/v2/nvcf/functions", headers=headers, timeout=30)
-        if resp.status_code != 200:
-            st.error(f"모델 목록 조회 실패: {resp.status_code} - {resp.text}")
+        if not model_ids:
+            st.error("모델 목록을 가져오지 못했습니다.")
             st.stop()
         
-        models_list = resp.json().get("functions", [])
-        nim_models = models_list  # 모든 모델 체크
-        
-        total = len(nim_models)
-        st.write(f"🔎 총 {total}개 모델을 발견했습니다. 체크를 시작합니다...")
+        total = len(model_ids)
+        st.write(f"🔎 총 {total}개 NVIDIA 모델을 발견했습니다. 체크를 시작합니다...")
         
         # 2. 병렬 체크 (ThreadPoolExecutor 사용)
         results = []
         with ThreadPoolExecutor(max_workers=3) as executor:
-            future_to_model = {executor.submit(check_single_model, m, st.session_state.api_key): m for m in nim_models}
+            future_to_model = {executor.submit(check_single_model, mid, st.session_state.api_key): mid for mid in model_ids}
             
             progress_bar = st.progress(0)
             status_text = st.empty()
