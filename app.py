@@ -49,28 +49,38 @@ if "api_key" not in st.session_state or not st.session_state.api_key:
     st.warning("⚠️ 상단의 'API 키 설정'에서 NVIDIA NIM API 키를 입력하고 저장해주세요.")
     st.stop()
 
-# Hugging Face API 를 통해 NVIDIA 모델 목록 가져오기
-def get_nvidia_models_from_hf():
-    try:
-        # Hugging Face API: nvidia 조직의 모든 모델 가져오기
-        url = "https://huggingface.co/api/models"
-        params = {
-            "author": "nvidia",
-            "pipeline_tag": "text-generation",  # 텍스트 생성 모델만 필터
-            "limit": 500  # 최대 500 개
-        }
-        resp = requests.get(url, params=params, timeout=30)
-        if resp.status_code == 200:
-            models = resp.json()
-            # 모델 ID 추출 (예: nvidia/Llama3-ChatQA-1.5-8B)
-            model_ids = [m["id"] for m in models]
-            return model_ids
-        else:
-            st.error(f"Hugging Face API 오류: {resp.status_code}")
-            return []
-    except Exception as e:
-        st.error(f"Hugging Face 모델 목록 가져오기 실패: {str(e)}")
-        return []
+# NVIDIA NIM 공식 모델 목록 (2024-2025 기준 주요 모델)
+# 실제 엔드포인트 ID 사용 (Hugging Face ID 와 다름)
+NIM_MODELS = [
+    "meta/llama-3.1-8b-instruct",
+    "meta/llama-3.1-70b-instruct",
+    "meta/llama-3.1-405b-instruct",
+    "meta/llama-3-8b-instruct",
+    "meta/llama-3-70b-instruct",
+    "nvidia/nemotron-4-340b-instruct",
+    "nvidia/nemotron-4-340b-reward",
+    "mistralai/mixtral-8x7b-instruct-v0.1",
+    "mistralai/mistral-7b-instruct-v0.3",
+    "mistralai/mistral-large-2407",
+    "google/gemma-2-9b-it",
+    "google/gemma-2-27b-it",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
+    "Qwen/Qwen2.5-72B-Instruct",
+    "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct",
+    "deepseek-ai/DeepSeek-V2.5",
+    "THUDM/glm-4-9b-chat",
+    "01-ai/Yi-1.5-9B-Chat",
+    "01-ai/Yi-1.5-34B-Chat",
+    "cohere/command-r-plus",
+    "cohere/command-r",
+    "ai21labs/jamba-1.5-large-instruct",
+    "ai21labs/jamba-1.5-mini-instruct",
+    "snowflake/arctic",
+    "databricks/dbrx-instruct",
+    "togethercomputer/llama-3-8b-instruct", # 예시: 일부는 사설 엔드포인트일 수 있음
+    # ... (필요시 추가)
+]
 
 # 체크 함수 (동기 방식)
 def check_single_model(model_id, api_key):
@@ -141,21 +151,13 @@ def check_single_model(model_id, api_key):
 # 체크 버튼
 if st.button("🔍 모델 상태 체크 시작", key="check_btn", use_container_width=True):
     try:
-        # 1. Hugging Face 에서 NVIDIA 모델 목록 가져오기
-        st.write("📡 Hugging Face 에서 NVIDIA 모델 목록을 가져오는 중...")
-        model_ids = get_nvidia_models_from_hf()
+        total = len(NIM_MODELS)
+        st.write(f"🔎 총 {total}개 NVIDIA NIM 모델을 체크합니다...")
         
-        if not model_ids:
-            st.error("모델 목록을 가져오지 못했습니다.")
-            st.stop()
-        
-        total = len(model_ids)
-        st.write(f"🔎 총 {total}개 NVIDIA 모델을 발견했습니다. 체크를 시작합니다...")
-        
-        # 2. 병렬 체크 (ThreadPoolExecutor 사용)
+        # 1. 병렬 체크 (ThreadPoolExecutor 사용)
         results = []
         with ThreadPoolExecutor(max_workers=3) as executor:
-            future_to_model = {executor.submit(check_single_model, mid, st.session_state.api_key): mid for mid in model_ids}
+            future_to_model = {executor.submit(check_single_model, mid, st.session_state.api_key): mid for mid in NIM_MODELS}
             
             progress_bar = st.progress(0)
             status_text = st.empty()
