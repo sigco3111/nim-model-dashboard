@@ -49,28 +49,37 @@ if "api_key" not in st.session_state or not st.session_state.api_key:
     st.warning("⚠️ 상단의 'API 키 설정'에서 NVIDIA NIM API 키를 입력하고 저장해주세요.")
     st.stop()
 
-# NVIDIA NIM 공식 엔드포인트 ID 목록 (2024-10 기준, build.nvidia.com 기반)
-# 주의: ID 형식은 `org/model-name` 형태이며, 버전 정보 (예: 3.1) 는 제거된 경우가 많음
+# NVIDIA NIM 공식 모델 목록 (integrate.api.nvidia.com 기준)
+# 공식 문서: https://build.nvidia.com/explore/discover
 NIM_MODELS = [
-    "meta/llama3-8b-instruct",      # 가장 안정적인 모델 (무료 티어 권장)
-    "meta/llama3-70b-instruct",
+    "meta/llama-3.1-8b-instruct",
+    "meta/llama-3.1-70b-instruct",
+    "meta/llama-3.1-405b-instruct",
+    "meta/llama-3-8b-instruct",
+    "meta/llama-3-70b-instruct",
     "nvidia/nemotron-4-340b-instruct",
     "mistralai/mixtral-8x7b-instruct-v0.1",
     "mistralai/mistral-7b-instruct-v0.3",
+    "mistralai/mistral-large-2407",
     "google/gemma-2-9b-it",
     "google/gemma-2-27b-it",
-    "qwen/qwen2-7b-instruct",
-    "qwen/qwen2-72b-instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
+    "Qwen/Qwen2.5-72B-Instruct",
+    "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct",
+    "deepseek-ai/DeepSeek-V2.5",
+    "THUDM/glm-4-9b-chat",
+    "01-ai/Yi-1.5-9B-Chat",
+    "01-ai/Yi-1.5-34B-Chat",
     "cohere/command-r-plus",
     "cohere/command-r",
+    "ai21labs/jamba-1.5-large-instruct",
     "ai21labs/jamba-1.5-mini-instruct",
     "snowflake/arctic",
     "databricks/dbrx-instruct",
-    "THUDM/glm-4-9b-chat",
-    "01-ai/Yi-1.5-9B-Chat",
 ]
 
-# 체크 함수 (동기 방식) - 에러 상세 정보 포함
+# 체크 함수 (OpenAI 호환 API 사용)
 def check_single_model(model_id, api_key):
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -82,11 +91,13 @@ def check_single_model(model_id, api_key):
         payload = {
             "model": model_id,
             "messages": [{"role": "user", "content": "Hi"}],
-            "max_tokens": 1
+            "max_tokens": 1,
+            "temperature": 0.0  # 안정성을 위해 0 으로 설정
         }
         
+        # 올바른 엔드포인트: integrate.api.nvidia.com/v1/chat/completions
         resp = requests.post(
-            f"https://api.nvcf.nvidia.com/v2/nvcf/pexec/functions/{model_id}",
+            "https://integrate.api.nvidia.com/v1/chat/completions",
             headers=headers,
             json=payload,
             timeout=15
@@ -96,15 +107,24 @@ def check_single_model(model_id, api_key):
         
         # 응답 본문 확인 (에러 메시지 포함)
         try:
-            error_detail = resp.json().get("detail", resp.text)
+            error_detail = resp.json().get("error", {}).get("message", resp.text)
         except:
             error_detail = resp.text
         
         if resp.status_code == 200:
             resp_data = resp.json()
+            # usage 정보에서 토큰 수 확인
+            usage = resp_data.get("usage", {})
+            prompt_tokens = usage.get("prompt_tokens", 0)
+            completion_tokens = usage.get("completion_tokens", 0)
+            total_tokens = prompt_tokens + completion_tokens
+            
+            # content 추출
             content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            tokens = len(content.split()) if content else 0
-            tokens_sec = tokens / (duration / 1000) if duration > 0 else 0
+            tokens = len(content.split()) if content else completion_tokens # content가 비어있으면 usage 사용
+            
+            # 토큰/초 계산 (completion_tokens 기반)
+            tokens_sec = completion_tokens / (duration / 1000) if duration > 0 and completion_tokens > 0 else 0
             
             return {
                 "model": model_id,
@@ -156,10 +176,9 @@ if st.button("🔍 모델 상태 체크 시작", key="check_btn", use_container_
             st.info(f"""
             💡 **확인사항**:
             - **API 키**: [build.nvidia.com](https://build.nvidia.com) 에서 새 키를 발급받으세요.
-            - **모델 지원 여부**: 무료 티어에서 `{test_model}`이 지원되는지 확인하세요.
-            - **엔드포인트 ID**: `build.nvidia.com` 에서 모델을 선택하면 **API 엔드포인트**가 표시됩니다. 그 URL 에서 ID 를 추출하세요.
-              - 예: `https://api.nvcf.nvidia.com/v2/nvcf/pexec/functions/{test_model}`
-            - **권장**: `meta/llama3-8b-instruct` 는 가장 안정적인 모델입니다.
+            - **엔드포인트**: 이제 `https://integrate.api.nvidia.com/v1/chat/completions` 를 사용합니다.
+            - **모델 ID**: `meta/llama-3.1-8b-instruct` 형식을 사용합니다.
+            - **권한**: 무료 티어에서 `{test_model}`이 지원되는지 확인하세요.
             """)
             st.stop()
         else:
