@@ -209,7 +209,7 @@ if "results" in st.session_state and st.session_state.results:
     
     # 테이블
     st.dataframe(
-        df.style.applymap(lambda v: "color: #28a745; font-weight: bold;" if v == "✅" else "color: #dc3545; font-weight: bold;" if v == "❌" else "", subset=["status"]),
+        df.style.map(lambda v: "color: #28a745; font-weight: bold;" if v == "✅" else "color: #dc3545; font-weight: bold;" if v == "❌" else "", subset=["status"]),
         use_container_width=True,
         hide_index=True
     )
