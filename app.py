@@ -79,88 +79,101 @@ NIM_MODELS = [
     "databricks/dbrx-instruct",
 ]
 
-# 체크 함수 (OpenAI 호환 API 사용)
-def check_single_model(model_id, api_key):
+# 체크 함수 (OpenAI 호환 API 사용) - 재시도 로직 추가
+def check_single_model(model_id, api_key, max_retries=2):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     
-    try:
-        start = time.time()
-        payload = {
-            "model": model_id,
-            "messages": [{"role": "user", "content": "Hi"}],
-            "max_tokens": 1,
-            "temperature": 0.0  # 안정성을 위해 0 으로 설정
-        }
-        
-        # 올바른 엔드포인트: integrate.api.nvidia.com/v1/chat/completions
-        resp = requests.post(
-            "https://integrate.api.nvidia.com/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=15
-        )
-        
-        duration = (time.time() - start) * 1000
-        
-        # 응답 본문 확인 (에러 메시지 포함)
+    for attempt in range(max_retries + 1):
         try:
-            error_detail = resp.json().get("error", {}).get("message", resp.text)
-        except:
-            error_detail = resp.text
-        
-        if resp.status_code == 200:
-            resp_data = resp.json()
-            # usage 정보에서 토큰 수 확인
-            usage = resp_data.get("usage", {})
-            prompt_tokens = usage.get("prompt_tokens", 0)
-            completion_tokens = usage.get("completion_tokens", 0)
-            total_tokens = prompt_tokens + completion_tokens
-            
-            # content 추출
-            content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            tokens = len(content.split()) if content else completion_tokens # content가 비어있으면 usage 사용
-            
-            # 토큰/초 계산 (completion_tokens 기반)
-            tokens_sec = completion_tokens / (duration / 1000) if duration > 0 and completion_tokens > 0 else 0
-            
-            return {
+            start = time.time()
+            payload = {
                 "model": model_id,
-                "status": "✅",
-                "response_time": round(duration, 2),
-                "tokens_per_sec": round(tokens_sec, 2),
-                "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "error": ""
+                "messages": [{"role": "user", "content": "Hi"}],
+                "max_tokens": 1,
+                "temperature": 0.0
             }
-        else:
+            
+            resp = requests.post(
+                "https://integrate.api.nvidia.com/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=15
+            )
+            
+            duration = (time.time() - start) * 1000
+            
+            # 응답 본문 확인 (에러 메시지 포함)
+            try:
+                error_detail = resp.json().get("error", {}).get("message", resp.text)
+            except:
+                error_detail = resp.text
+            
+            if resp.status_code == 200:
+                resp_data = resp.json()
+                usage = resp_data.get("usage", {})
+                completion_tokens = usage.get("completion_tokens", 0)
+                content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                tokens = len(content.split()) if content else completion_tokens
+                tokens_sec = completion_tokens / (duration / 1000) if duration > 0 and completion_tokens > 0 else 0
+                
+                return {
+                    "model": model_id,
+                    "status": "✅",
+                    "response_time": round(duration, 2),
+                    "tokens_per_sec": round(tokens_sec, 2),
+                    "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "error": ""
+                }
+            elif resp.status_code == 503 and attempt < max_retries:
+                # 503 에러 시 재시도 (일시적 오류일 가능성 높음)
+                time.sleep(2 ** attempt)  # 지수 백오프 (2초, 4초...)
+                continue
+            else:
+                return {
+                    "model": model_id,
+                    "status": "❌",
+                    "response_time": 0,
+                    "tokens_per_sec": 0,
+                    "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "error": f"HTTP {resp.status_code}: {error_detail}"
+                }
+        except requests.exceptions.Timeout:
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
+                continue
             return {
                 "model": model_id,
                 "status": "❌",
                 "response_time": 0,
                 "tokens_per_sec": 0,
                 "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "error": f"HTTP {resp.status_code}: {error_detail}"
+                "error": "Timeout (15s)"
             }
-    except requests.exceptions.Timeout:
-        return {
-            "model": model_id,
-            "status": "❌",
-            "response_time": 0,
-            "tokens_per_sec": 0,
-            "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "error": "Timeout (15s)"
-        }
-    except Exception as e:
-        return {
-            "model": model_id,
-            "status": "❌",
-            "response_time": 0,
-            "tokens_per_sec": 0,
-            "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "error": str(e)
-        }
+        except Exception as e:
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
+                continue
+            return {
+                "model": model_id,
+                "status": "❌",
+                "response_time": 0,
+                "tokens_per_sec": 0,
+                "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "error": str(e)
+            }
+    
+    # 모든 재시도 실패
+    return {
+        "model": model_id,
+        "status": "❌",
+        "response_time": 0,
+        "tokens_per_sec": 0,
+        "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "error": f"Failed after {max_retries + 1} attempts"
+    }
 
 # 체크 버튼
 if st.button("🔍 모델 상태 체크 시작", key="check_btn", use_container_width=True):
