@@ -82,7 +82,7 @@ NIM_MODELS = [
     # ... (필요시 추가)
 ]
 
-# 체크 함수 (동기 방식)
+# 체크 함수 (동기 방식) - 에러 상세 정보 포함
 def check_single_model(model_id, api_key):
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -106,6 +106,12 @@ def check_single_model(model_id, api_key):
         
         duration = (time.time() - start) * 1000
         
+        # 응답 본문 확인 (에러 메시지 포함)
+        try:
+            error_detail = resp.json().get("detail", resp.text)
+        except:
+            error_detail = resp.text
+        
         if resp.status_code == 200:
             resp_data = resp.json()
             content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
@@ -127,7 +133,7 @@ def check_single_model(model_id, api_key):
                 "response_time": 0,
                 "tokens_per_sec": 0,
                 "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "error": f"HTTP {resp.status_code}"
+                "error": f"HTTP {resp.status_code}: {error_detail}"
             }
     except requests.exceptions.Timeout:
         return {
@@ -136,7 +142,7 @@ def check_single_model(model_id, api_key):
             "response_time": 0,
             "tokens_per_sec": 0,
             "last_check": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "error": "Timeout"
+            "error": "Timeout (15s)"
         }
     except Exception as e:
         return {
@@ -151,13 +157,27 @@ def check_single_model(model_id, api_key):
 # 체크 버튼
 if st.button("🔍 모델 상태 체크 시작", key="check_btn", use_container_width=True):
     try:
-        total = len(NIM_MODELS)
-        st.write(f"🔎 총 {total}개 NVIDIA NIM 모델을 체크합니다...")
+        # 1. 단일 모델 테스트 (첫 번째 모델만 체크)
+        test_model = NIM_MODELS[0]
+        st.write(f"🧪 먼저 첫 번째 모델 ({test_model}) 로 테스트 중...")
         
-        # 1. 병렬 체크 (ThreadPoolExecutor 사용)
-        results = []
+        test_result = check_single_model(test_model, st.session_state.api_key)
+        
+        if test_result["status"] == "❌":
+            st.error(f"❌ 테스트 모델 체크 실패: {test_result['error']}")
+            st.info("💡 **확인사항**:\n- API 키가 올바른지 확인하세요.\n- 해당 모델이 무료 티어에서 지원되는지 확인하세요 (build.nvidia.com).\n- 엔드포인트 ID 형식이 맞는지 확인하세요 (예: `meta/llama3-8b-instruct` vs `meta/llama-3.1-8b-instruct`).")
+            st.stop()
+        else:
+            st.success(f"✅ 테스트 성공! ({test_result['response_time']}ms, {test_result['tokens_per_sec']} tokens/sec)")
+            st.write(f"🔎 총 {len(NIM_MODELS)}개 모델을 체크합니다...")
+        
+        # 2. 전체 모델 체크
+        results = [test_result]  # 테스트 결과를 포함
+        
         with ThreadPoolExecutor(max_workers=3) as executor:
-            future_to_model = {executor.submit(check_single_model, mid, st.session_state.api_key): mid for mid in NIM_MODELS}
+            # 첫 번째 모델 제외하고 체크
+            remaining_models = NIM_MODELS[1:]
+            future_to_model = {executor.submit(check_single_model, mid, st.session_state.api_key): mid for mid in remaining_models}
             
             progress_bar = st.progress(0)
             status_text = st.empty()
@@ -165,9 +185,9 @@ if st.button("🔍 모델 상태 체크 시작", key="check_btn", use_container_
             for i, future in enumerate(as_completed(future_to_model)):
                 result = future.result()
                 results.append(result)
-                progress = int((i + 1) / total * 100)
+                progress = int((i + 1) / len(NIM_MODELS) * 100)
                 progress_bar.progress(progress)
-                status_text.text(f"체크 중: {i + 1}/{total} ({result['status']})")
+                status_text.text(f"체크 중: {i + 2}/{len(NIM_MODELS)} ({result['status']})")
             
             progress_bar.empty()
             status_text.empty()
