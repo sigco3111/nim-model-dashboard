@@ -49,37 +49,25 @@ if "api_key" not in st.session_state or not st.session_state.api_key:
     st.warning("⚠️ 상단의 'API 키 설정'에서 NVIDIA NIM API 키를 입력하고 저장해주세요.")
     st.stop()
 
-# NVIDIA NIM 공식 모델 목록 (2024-2025 기준 주요 모델)
-# 실제 엔드포인트 ID 사용 (Hugging Face ID 와 다름)
+# NVIDIA NIM 공식 엔드포인트 ID 목록 (2024-10 기준, build.nvidia.com 기반)
+# 주의: ID 형식은 `org/model-name` 형태이며, 버전 정보 (예: 3.1) 는 제거된 경우가 많음
 NIM_MODELS = [
-    "meta/llama-3.1-8b-instruct",
-    "meta/llama-3.1-70b-instruct",
-    "meta/llama-3.1-405b-instruct",
-    "meta/llama-3-8b-instruct",
-    "meta/llama-3-70b-instruct",
+    "meta/llama3-8b-instruct",      # 가장 안정적인 모델 (무료 티어 권장)
+    "meta/llama3-70b-instruct",
     "nvidia/nemotron-4-340b-instruct",
-    "nvidia/nemotron-4-340b-reward",
     "mistralai/mixtral-8x7b-instruct-v0.1",
     "mistralai/mistral-7b-instruct-v0.3",
-    "mistralai/mistral-large-2407",
     "google/gemma-2-9b-it",
     "google/gemma-2-27b-it",
-    "Qwen/Qwen2.5-7B-Instruct",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "Qwen/Qwen2.5-72B-Instruct",
-    "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct",
-    "deepseek-ai/DeepSeek-V2.5",
-    "THUDM/glm-4-9b-chat",
-    "01-ai/Yi-1.5-9B-Chat",
-    "01-ai/Yi-1.5-34B-Chat",
+    "qwen/qwen2-7b-instruct",
+    "qwen/qwen2-72b-instruct",
     "cohere/command-r-plus",
     "cohere/command-r",
-    "ai21labs/jamba-1.5-large-instruct",
     "ai21labs/jamba-1.5-mini-instruct",
     "snowflake/arctic",
     "databricks/dbrx-instruct",
-    "togethercomputer/llama-3-8b-instruct", # 예시: 일부는 사설 엔드포인트일 수 있음
-    # ... (필요시 추가)
+    "THUDM/glm-4-9b-chat",
+    "01-ai/Yi-1.5-9B-Chat",
 ]
 
 # 체크 함수 (동기 방식) - 에러 상세 정보 포함
@@ -165,7 +153,14 @@ if st.button("🔍 모델 상태 체크 시작", key="check_btn", use_container_
         
         if test_result["status"] == "❌":
             st.error(f"❌ 테스트 모델 체크 실패: {test_result['error']}")
-            st.info("💡 **확인사항**:\n- API 키가 올바른지 확인하세요.\n- 해당 모델이 무료 티어에서 지원되는지 확인하세요 (build.nvidia.com).\n- 엔드포인트 ID 형식이 맞는지 확인하세요 (예: `meta/llama3-8b-instruct` vs `meta/llama-3.1-8b-instruct`).")
+            st.info(f"""
+            💡 **확인사항**:
+            - **API 키**: [build.nvidia.com](https://build.nvidia.com) 에서 새 키를 발급받으세요.
+            - **모델 지원 여부**: 무료 티어에서 `{test_model}`이 지원되는지 확인하세요.
+            - **엔드포인트 ID**: `build.nvidia.com` 에서 모델을 선택하면 **API 엔드포인트**가 표시됩니다. 그 URL 에서 ID 를 추출하세요.
+              - 예: `https://api.nvcf.nvidia.com/v2/nvcf/pexec/functions/{test_model}`
+            - **권장**: `meta/llama3-8b-instruct` 는 가장 안정적인 모델입니다.
+            """)
             st.stop()
         else:
             st.success(f"✅ 테스트 성공! ({test_result['response_time']}ms, {test_result['tokens_per_sec']} tokens/sec)")
