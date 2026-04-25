@@ -3,8 +3,8 @@
 > NVIDIA NIM (NVIDIA Inference Microservices) 에서 제공하는 모든 모델의 **실시간 상태**, **응답 속도**, **가용성**을 한눈에 확인하는 전문 대시보드입니다.
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue.svg)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.109.0-green.svg)
-![Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black.svg)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.32+-red.svg)
+![Streamlit Cloud](https://img.shields.io/badge/Deployed%20on-Streamlit%20Cloud-black.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 ---
@@ -17,7 +17,7 @@
 - **📊 고급 필터링 & 정렬**:
   - **필터**: 성공/실패 모델만 필터링
   - **정렬**: 응답 시간 (빠른순), 토큰/초 (빠른순), 모델 이름, 상태별 정렬
-- **🔑 안전한 API 키 관리**: 브라우저 `localStorage` 기반의 안전한 키 저장 (서버 전송 없음).
+- **🔑 안전한 API 키 관리**: UI 에서 입력한 키는 서버에 전송되지 않으며, 로컬 개발 시 `.env` 파일 사용 가능.
 - **📱 모바일 최적화**: 반응형 디자인으로 PC 와 모바일 어디서든 편리하게 사용 가능합니다.
 - **🎨 깔끔한 UI**: 불필요한 애니메이션 없이 **데이터 중심의 전문적인 디자인**을 지향합니다.
 
@@ -32,9 +32,9 @@
 
 ## 🛠️ 기술 스택
 
-- **Backend**: FastAPI (Python 3.12), httpx (비동기 HTTP 클라이언트)
-- **Frontend**: HTML5, CSS3, Vanilla JavaScript (프레임워크 없음)
-- **Deployment**: Vercel (Serverless Functions)
+- **Framework**: Streamlit (Python 3.12)
+- **HTTP Client**: requests (동기), ThreadPoolExecutor (병렬 처리)
+- **Deployment**: Streamlit Cloud
 - **API**: NVIDIA NIM API (build.nvidia.com)
 
 ---
@@ -60,14 +60,22 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 4. 서버 실행
+### 4. 환경 변수 설정 (선택)
 ```bash
-uvicorn main:app --reload --port 8000
+cp .env.example .env
+# .env 파일에 NVIDIA API 키 입력
+# NVIDIA_API_KEY=nvapi-xxxxx
+```
+> UI에서 직접 키를 입력할 수도 있습니다. `.env` 파일은 로컬 개발 시 편의용입니다.
+
+### 5. 서버 실행
+```bash
+streamlit run app.py --server.port 8501
 ```
 
-### 5. 브라우저 접속
+### 6. 브라우저 접속
 ```
-http://localhost:8000
+http://localhost:8501
 ```
 
 ---
@@ -75,13 +83,16 @@ http://localhost:8000
 ## 📖 사용 방법
 
 1. **API 키 입력**:
-   - 사이트 상단의 입력창에 **NVIDIA NIM API 키**를 입력합니다.
+   - 대시보드 상단의 **"API 키 설정"** 에서 **NVIDIA NIM API 키**를 입력합니다.
    - [NVIDIA NIM](https://build.nvidia.com/explore/discover) 에서 무료 키를 발급받으실 수 있습니다.
-   - **저장** 버튼을 클릭하여 키를 브라우저에 저장합니다.
+   - **저장** 버튼을 클릭하여 키를 세션에 저장합니다.
+   - 로컬 개발 시 `.env` 파일에 `NVIDIA_API_KEY` 를 설정하면 자동으로 사용됩니다.
 
 2. **모델 체크 시작**:
    - **"모델 상태 체크 시작"** 버튼을 클릭합니다.
-   - 시스템이 자동으로 최신 모델 목록을 조회하고, 각 모델에 대해 짧은 헬스체크 요청을 보냅니다.
+   - 시스템이 NVIDIA NIM API(`/v1/models`) 에서 **동적으로 최신 모델 목록을 조회**합니다.
+   - 비채팅 모델(임베딩, 이미지, 오디오 등)을 자동으로 필터링합니다.
+   - 각 채팅 모델에 대해 헬스체크 요청을 병렬로 전송합니다 (동시성 5).
    - 진행 상황에 따라 결과가 실시간으로 표시됩니다.
 
 3. **결과 분석**:
@@ -93,10 +104,10 @@ http://localhost:8000
 
 ## ⚠️ 주의사항
 
-- **API Rate Limit**: NVIDIA NIM 무료 티어는 분당 요청 수 제한이 있을 수 있습니다. 대시보드는 동시성 3 개로 제한하여 안정성을 높였습니다.
-- **체크 시간**: 모델 수가 200 개 이상일 경우, 모든 모델을 체크하는 데 **10~30 분**이 소요될 수 있습니다.
-- **서버리스 환경**: Vercel 배포 시, 서버리스 함수의 타임아웃 제한 (약 60 초) 으로 인해 대용량 체크 시 일부 모델이 타임아웃될 수 있습니다. 로컬 실행 시에는 이 제한이 없습니다.
-- **보안**: API 키는 사용자의 브라우저 `localStorage`에만 저장되며, 서버 (Vercel) 나 제 3 에 전송되지 않습니다.
+- **API Rate Limit**: NVIDIA NIM 무료 티어는 분당 요청 수 제한(~40 RPM)이 있을 수 있습니다. 대시보드는 동시성 5개로 제한하고, 429 응답 시 자동 백오프합니다.
+- **체크 시간**: 약 110~120개 모델을 체크하는 데 **약 2~5분**이 소요됩니다.
+- **동적 모델 조회**: 모델 목록은 NVIDIA API 에서 실시간으로 조회하므로, 새 모델이 추가되면 자동으로 반영됩니다.
+- **보안**: API 키는 세션에만 저장되며, 외부 서버에 전송되지 않습니다. `.env` 파일은 `.gitignore` 에 등록되어 있습니다.
 
 ---
 
